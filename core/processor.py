@@ -1,32 +1,59 @@
-from scipy.signal import butter, filtfilt, find_peaks, welch
+# =====================================================
+# KIVARA CORE — Signal Processor
+# Stable / Streamlit-safe / Edge-ready
+# =====================================================
+
 import numpy as np
+from scipy.signal import butter, sosfiltfilt, find_peaks
 
-FS = 100
 
-def bandpass_filter(signal):
-    nyq = FS / 2
-    b, a = butter(4, [0.5 / nyq, 8 / nyq], btype="band")
-    return filtfilt(b, a, signal)
+# =====================================================
+# Utility
+# =====================================================
 
-def detect_peaks(signal):
-    z = (signal - np.mean(signal)) / (np.std(signal) + 1e-8)
-    peaks, _ = find_peaks(z, prominence=0.6, distance=int(FS*0.4), height=0.3)
-    return peaks
+def _safe_array(x):
+    if x is None:
+        return np.array([])
+    return np.asarray(x, dtype=float)
 
-def calculate_hrv(peaks):
-    if len(peaks) < 6:
-        return None, None, None
 
-    ibi = np.diff(peaks) / FS
-    hr = 60 / np.mean(ibi)
-    rmssd = np.sqrt(np.mean(np.diff(ibi)**2)) * 1000
+# =====================================================
+# Bandpass Filter (STABLE - SOS)
+# =====================================================
 
-    if len(ibi) < 10:
-        lf_hf = 1.0 + np.std(ibi) * 15
-    else:
-        f, pxx = welch(ibi, fs=4, nperseg=min(len(ibi),64))
-        lf = np.trapz(pxx[(f>=0.04)&(f<0.15)])
-        hf = np.trapz(pxx[(f>=0.15)&(f<=0.4)])
-        lf_hf = lf/(hf+1e-8) if hf>0 else 6.0
+def bandpass_filter(signal, fs=100):
+    """
+    Stable bandpass filter using SOS representation.
+    Prevents filtfilt instability on Streamlit Cloud.
+    """
+    signal = _safe_array(signal)
 
-    return round(hr,1), round(rmssd,1), round(lf_hf,2)
+    # --- Guard for short signals ---
+    if len(signal) < fs:
+        return signal
+
+    nyq = fs / 2.0
+    low = 0.5 / nyq
+    high = 8.0 / nyq
+
+    sos = butter(
+        N=4,
+        Wn=[low, high],
+        btype="band",
+        output="sos"
+    )
+
+    return sosfiltfilt(sos, signal)
+
+
+# =====================================================
+# Peak Detection (PPG)
+# =====================================================
+
+def detect_peaks(ppg_signal, fs=100):
+    """
+    Detect systolic peaks in PPG signal.
+    """
+    ppg_signal = _safe_array(ppg_signal)
+
+    if len(ppg_signal) < fs:
