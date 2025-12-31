@@ -24,8 +24,7 @@ def simulate_ppg(duration=60, stress_level=0.0, seed=42):
 
     noise = 0.05 * np.random.randn(len(t))
     motion = 0
-    for f in [0.3,1.2,2.5]:
-        motion += np.sin(2 * np.pi * f * t )
-    motion *= stress_level * 0.8 * np.random.randn.(len(t))
+    noise = 0.05 * np.random.randn(len(t))
+    motion = stress_level * 0.8 * np.sin(2 * np.pi * np.array([0.3,1.2,2.5]) @ t) * np.random.randn(len(t))
 
     return t, ppg_clean + noise + motion.sum(axis=0 if motion.ndim > 1 else 0)
