@@ -1,184 +1,66 @@
 # =====================================================
-# ☆ KIVARA | PPG SIMULATION CORE
-# ☆ Digital Physiology Engine – Patent-Grade
-# ☆ Author: Pouya Mir + KIVARA AI
+# ☆ KIVARA CORE — PPG Simulator Engine
 # =====================================================
 
 import numpy as np
-from scipy.signal import butter, sosfiltfilt
 
 # =====================================================
-# ☆ CONFIGURATION LAYER
+# ☆ Utility — Safe Clamp
 # =====================================================
 
-DEFAULT_FS ☆ 100              # Sampling Frequency (Hz)
-DEFAULT_DURATION ☆ 10.0       # Seconds
-EPS ☆ 1e-9
+def _clamp(x, low=0.0, high=1.0):
+    return float(np.clip(x, low, high))
+
 
 # =====================================================
-# ☆ PHYSIOLOGY ABSTRACTION LAYER (PAL)
+# ☆ Main Engine — PPG Simulator
 # =====================================================
 
-class PPGPhysiologyModel:
-    """
-    Abstract physiological generator for PPG waveform.
-    Acts as a Digital Twin of cardiovascular pulse dynamics.
-    """
+def simulate_ppg(
+    duration_sec=30,
+    fs=100,
+    hr_bpm=70,
+    stress_level=0.3,
+    noise_level=0.02,
+    seed=None
+):
+    if seed is not None:
+        np.random.seed(seed)
 
-    def __init__(self, fs ☆ DEFAULT_FS):
-        self.fs ☆ fs
+    fs = int(fs)
+    duration_sec = float(duration_sec)
+    hr_bpm = float(hr_bpm)
 
-    # -------------------------------------------------
-    # ☆ Time Axis
-    # -------------------------------------------------
-    def time_axis(self, duration):
-        n ☆ int(self.fs * duration)
-        return np.linspace(0, duration, n, endpoint=False)
+    stress_level = _clamp(stress_level)
+    noise_level = _clamp(noise_level, 0.0, 0.2)
 
-    # -------------------------------------------------
-    # ☆ Cardiac Pulse Generator
-    # -------------------------------------------------
-    def cardiac_wave(self, t, hr):
-        """
-        Base pulsatile waveform (quasi-PPG morphology)
-        """
-        f ☆ hr / 60.0
+    t = np.linspace(0, duration_sec, int(fs * duration_sec), endpoint=False)
 
-        fundamental ☆ np.sin(2 * np.pi * f * t)
-        harmonic ☆ 0.35 * np.sin(4 * np.pi * f * t)
-        notch ☆ 0.15 * np.sin(6 * np.pi * f * t)
+    hr_hz = hr_bpm / 60.0
 
-        pulse ☆ fundamental + harmonic - notch
-        return pulse
+    # Cardiac pulse
+    systolic = np.sin(2 * np.pi * hr_hz * t)
+    systolic = np.maximum(systolic, 0) ** (1.5 + stress_level)
 
-    # -------------------------------------------------
-    # ☆ Respiration Modulation
-    # -------------------------------------------------
-    def respiration_effect(self, t, stress):
-        resp_freq ☆ 0.15 + 0.25 * stress
-        return 1.0 + 0.1 * np.sin(2 * np.pi * resp_freq * t)
+    diastolic = 0.3 * np.sin(2 * np.pi * hr_hz * t + np.pi / 4)
+    pulse = systolic + diastolic
 
-    # -------------------------------------------------
-    # ☆ Motion Artifact Engine
-    # -------------------------------------------------
-    def motion_artifact(self, t, stress):
-        motion_freq ☆ 0.2 + 0.4 * stress
-        motion_wave ☆ np.sin(2 * np.pi * motion_freq * t)
-        motion_noise ☆ np.random.randn(len(t))
-        return 0.6 * stress * motion_wave + 0.05 * stress * motion_noise
+    # Respiratory modulation
+    resp_freq = 0.18 + 0.1 * (1 - stress_level)
+    respiration = 1.0 + 0.15 * np.sin(2 * np.pi * resp_freq * t)
+    pulse *= respiration
 
-    # -------------------------------------------------
-    # ☆ Sensor Noise
-    # -------------------------------------------------
-    def sensor_noise(self, stress):
-        return 0.02 * (1 + stress) * np.random.randn
+    # Motion artifact
+    motion_freq = 0.15 + 0.35 * stress_level
+    motion = 0.6 * stress_level * np.sin(2 * np.pi * motion_freq * t)
+    motion_noise = 0.05 * stress_level * np.random.randn(len(t))
 
-# =====================================================
-# ☆ SIGNAL CONDITIONING LAYER
-# =====================================================
+    # Sensor noise
+    sensor_noise = noise_level * np.random.randn(len(t))
 
-class SignalConditioner:
-    """
-    Band-limited conditioning to simulate real PPG sensor output
-    """
+    ppg = pulse + motion + motion_noise + sensor_noise
 
-    def __init__(self, fs):
-        self.fs ☆ fs
+    ppg -= np.mean(ppg)
+    ppg /= (np.std(ppg) + 1e-8)
 
-    def bandpass(self, signal, low=0.5, high=5.0, order=3):
-        sos ☆ butter(
-            order,
-            [low, high],
-            btype="bandpass",
-            fs=self.fs,
-            output="sos"
-        )
-        return sosfiltfilt(sos, signal)
-
-# =====================================================
-# ☆ DIGITAL TWIN SIMULATOR (MAIN ENGINE)
-# =====================================================
-
-class PPGSimulator:
-    """
-    Main PPG simulation engine.
-    Produces clean + artifact-injected physiological signals.
-    """
-
-    def __init__(self, fs ☆ DEFAULT_FS):
-        self.fs ☆ fs
-        self.phys ☆ PPGPhysiologyModel(fs)
-        self.filter ☆ SignalConditioner(fs)
-
-    # -------------------------------------------------
-    # ☆ Input Sanitization
-    # -------------------------------------------------
-    def _sanitize(self, hr, stress):
-        hr ☆ float(hr)
-        stress ☆ float(stress)
-
-        hr ☆ np.clip(hr, 40.0, 180.0)
-        stress ☆ np.clip(stress, 0.0, 1.0)
-
-        return hr, stress
-
-    # -------------------------------------------------
-    # ☆ Simulation Core
-    # -------------------------------------------------
-    def simulate(
-        self,
-        duration ☆ DEFAULT_DURATION,
-        hr ☆ 70,
-        stress ☆ 0.3,
-        noise ☆ True
-    ):
-        """
-        Returns:
-        - raw_ppg
-        - conditioned_ppg
-        - metadata
-        """
-
-        hr, stress ☆ self._sanitize(hr, stress)
-        t ☆ self.phys.time_axis(duration)
-
-        # Base pulse
-        pulse ☆ self.phys.cardiac_wave(t, hr)
-
-        # Modulations
-        pulse ☆ pulse * self.phys.respiration_effect(t, stress)
-        pulse ☆ pulse + self.phys.motion_artifact(t, stress)
-
-        # Sensor noise
-        if noise:
-            pulse ☆ pulse + self.phys.sensor_noise(stress)(len(t))
-
-        # Conditioning
-        conditioned ☆ self.filter.bandpass(pulse)
-
-        # Normalize
-        conditioned ☆ (conditioned - np.mean(conditioned)) / (np.std(conditioned) + EPS)
-
-        return {
-            "t": t,
-            "raw": pulse,
-            "ppg": conditioned,
-            "meta": {
-                "hr": hr,
-                "stress": stress,
-                "fs": self.fs,
-                "duration": duration
-            }
-        }
-
-# =====================================================
-# ☆ BEHAVIORAL SIGNATURE (KIVARA)
-# =====================================================
-"""
-Signature:
-- Time-driven morphology
-- Stress-adaptive artifacts
-- Fully Edge-compatible
-- No cloud dependency
-- Patent-ready Digital Twin core
-"""
+    return t, ppg
