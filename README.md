@@ -9,7 +9,7 @@ Personalized stress monitoring with gender, menstrual cycle support, and individ
 
 ### 🚀 Live Demo
 [[Click here for interactive demo](LINK_WILL_BE_ADDED_AFTER_DEPLOY)](https://kivara-dnxjd2432wiutexwcu5ogr.streamlit.app/)  
-(به‌زودی دمو زنده اضافه می‌شود)
+(دموی زنده)
 
 ### Key Features | ویژگی‌های کلیدی
 - Realistic PPG simulation with motion noise  
