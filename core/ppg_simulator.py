@@ -1,20 +1,8 @@
-# =====================================================
-# ☆ KIVARA CORE — PPG Simulator Engine
-# =====================================================
-
 import numpy as np
-
-# =====================================================
-# ☆ Utility — Safe Clamp
-# =====================================================
 
 def _clamp(x, low=0.0, high=1.0):
     return float(np.clip(x, low, high))
 
-
-# =====================================================
-# ☆ Main Engine — PPG Simulator
-# =====================================================
 
 def simulate_ppg(
     duration_sec=30,
@@ -38,28 +26,23 @@ def simulate_ppg(
 
     hr_hz = hr_bpm / 60.0
 
-    # Cardiac pulse
     systolic = np.sin(2 * np.pi * hr_hz * t)
     systolic = np.maximum(systolic, 0) ** (1.5 + stress_level)
 
     diastolic = 0.3 * np.sin(2 * np.pi * hr_hz * t + np.pi / 4)
     pulse = systolic + diastolic
 
-    # Respiratory modulation
     resp_freq = 0.18 + 0.1 * (1 - stress_level)
     respiration = 1.0 + 0.15 * np.sin(2 * np.pi * resp_freq * t)
     pulse *= respiration
 
-    # Motion artifact
     motion_freq = 0.15 + 0.35 * stress_level
     motion = 0.6 * stress_level * np.sin(2 * np.pi * motion_freq * t)
     motion_noise = 0.05 * stress_level * np.random.randn(len(t))
 
-    # Sensor noise
     sensor_noise = noise_level * np.random.randn(len(t))
 
     ppg = pulse + motion + motion_noise + sensor_noise
-
     ppg -= np.mean(ppg)
     ppg /= (np.std(ppg) + 1e-8)
 
